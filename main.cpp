@@ -44,33 +44,24 @@ int main(int argc, char **argv) {
     string id = "1";
     if (argc > 3)
         id = string(argv[3]);
-    outFile = "output/" + outFile + "_" + id + ".txt";
+    string baseOutFile = "output/" + outFile + "_" + id;
+    outFile = baseOutFile + ".txt";
     string dir = outFile.substr(0, outFile.find_last_of('/'));
     system(("mkdir -p " + dir).c_str());
 
     ofstream fout(outFile, ios::out);
-    fout << "EXEC_TIME " << alg.getExecutionTime() << endl;
-    fout << "SOL_TIME " << alg.getBestSolutionTime() << endl;
-    fout << "OBJ " << s.time << endl;
-    fout << "N_ROUTES " << s.routes.size() << endl;
-    fout << "N_CLIENTS";
-    for (auto &r: s.routes) fout << " " << (r->size() - 2);
-    fout << endl << "ROUTES" << endl;
-    for (auto &r: s.routes) {
-        for (unsigned int c = 1; c < r->size() - 1; c++) {
-            fout << r->at(c) << " ";
-        }
-        fout << endl;
-    }
-    fout << endl;
+    alg.writeResult(fout);
     fout.close();
 
     // output search progress
-    string spFile = outFile.substr(0, outFile.find_last_of('.')) + "_SP.txt";
+    string spFile = baseOutFile + "_SP.txt";
     ofstream spout(spFile, ios::out);
-    for (auto x: alg.getSearchProgress()) {
-        spout << x.first << "\t" << x.second << endl;
-    }
+    alg.writeSearchProgress(spout);
     spout.close();
+
+    string xItNiFile = baseOutFile + "_itni.txt";
+    ofstream itNiOut(xItNiFile, ios::out);
+    alg.writeXItNi(itNiOut);
+    itNiOut.close();
     return 0;
 }

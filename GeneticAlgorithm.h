@@ -3,6 +3,7 @@
 
 
 #include <chrono>
+#include <fstream>
 #include "Instance.h"
 #include "NeighborSearch.h"
 #include "Timer.h"
@@ -29,6 +30,7 @@ private:
     chrono::milliseconds bestSolutionFoundTime;
 
     vector<pair<unsigned int, unsigned int> > searchProgress; // stores (time, value) of each best solution found
+    vector<pair<unsigned int, pair<unsigned int, unsigned int>> > xItNi; // stores the (TE, obj) value if itNi was "key"
 
     // random number generator
     mt19937 generator;
@@ -69,8 +71,33 @@ public:
         return bestSolutionFoundTime.count();
     }
 
-    const vector<pair<unsigned int, unsigned int> > &getSearchProgress() {
-        return searchProgress;
+    void writeResult(ofstream &fout) {
+        fout << "EXEC_TIME " << getExecutionTime() << endl;
+        fout << "SOL_TIME " << getBestSolutionTime() << endl;
+        fout << "OBJ " << bestSolution->time << endl;
+        fout << "N_ROUTES " << bestSolution->routes.size() << endl;
+        fout << "N_CLIENTS";
+        for (auto &r: bestSolution->routes) fout << " " << (r->size() - 2);
+        fout << endl << "ROUTES" << endl;
+        for (auto &r: bestSolution->routes) {
+            for (unsigned int c = 1; c < r->size() - 1; c++) {
+                fout << r->at(c) << " ";
+            }
+            fout << endl;
+        }
+        fout << endl;
+    }
+
+    void writeSearchProgress(ofstream &spout) {
+        for (const auto &x: searchProgress) {
+            spout << x.first << "\t" << x.second << endl;
+        }
+    }
+
+    void writeXItNi(ofstream &out) {
+        for(const auto &x: xItNi) {
+            out << x.first << "\t" << x.second.first << "\t" << x.second.second << endl;
+        }
     }
 };
 

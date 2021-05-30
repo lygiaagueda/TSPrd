@@ -10,12 +10,6 @@
 
 namespace filesystem = experimental::filesystem;
 
-struct Result {
-    unsigned int obj;
-    unsigned int timeBest;
-    unsigned int timeStop;
-};
-
 struct Params {
     unsigned int mi;
     unsigned int lambda;
@@ -88,11 +82,9 @@ static void selectInstances() {
     }
 }
 
-Result runWith(const Instance &instance, const Params &params) {
-    auto ga = GeneticAlgorithm(instance, params.mi, params.lambda, params.nClose(),
-                               params.nbElit(), params.itNi, params.itDiv(), 60 * 60);
-
-    return {ga.getSolution().time, ga.getBestSolutionTime(), ga.getExecutionTime()};
+GeneticAlgorithm runWith(const Instance &instance, const Params &params) {
+    return GeneticAlgorithm(instance, params.mi, params.lambda, params.nClose(),
+                            params.nbElit(), params.itNi, params.itDiv(), 60 * 60);
 }
 
 void saveOptionalValues(int which = 0) {
@@ -132,10 +124,11 @@ void saveOptionalValues(int which = 0) {
             unsigned int bestObj = numeric_limits<unsigned int>::max();
             for (int i = 0; i < 10; i++) {
                 cout << "\rRunning " << instanceName << "  ";
-                cout << to_string(i+1) << "/10       ";
+                cout << to_string(i + 1) << "/10       ";
+                fflush(stdout);
                 Instance instance("testSet/" + instanceName);
                 auto result = runWith(instance, {25, 100, 0.4, 0.2, 2000});
-                bestObj = min(bestObj, result.obj);
+                bestObj = min(bestObj, result.getSolution().time);
             }
             fout << instanceName << " " << bestObj << endl;
             cout << endl << instanceName << " " << bestObj << endl;
@@ -175,11 +168,15 @@ void testParams(const Params &params, const vector<string> &instances, const map
             cout << "\rRunning: " << nInstance << "/" << instances.size();
             cout << "  " << (i + 1) << "/" << NUMBER_EXECUTIONS << "       ";
             fflush(stdout);
-            auto result = runWith(instance, params);
-            double gap = (((double) result.obj / optimals.at(instanceName)) - 1) * 100;
+            auto ga = runWith(instance, params);
+            double gap = (((double) ga.getSolution().time / optimals.at(instanceName)) - 1) * 100;
             totalGap += gap;
-            totalTimeExec += result.timeStop;
-            totalTimeBest += result.timeBest;
+            totalTimeExec += ga.getExecutionTime();
+            totalTimeBest += ga.getBestSolutionTime();
+
+            ofstream itNiOut("instances/testSet/itni/" + instanceName + "_" + to_string(i + 1) + ".txt", ios::out);
+            ga.writeXItNi(itNiOut);
+            itNiOut.close();
         }
     }
 
@@ -199,10 +196,7 @@ void testParams(const Params &params, const vector<string> &instances, const map
 
 void run(int which = -1) {
     vector<Params> paramsSet({
-                                     {25, 100, 0.4, 0.2, 2000},
-                                     {13, 50,  0.4, 0.2, 2000},
-                                     {50, 200, 0.4, 0.2, 2000},
-                                     {25, 50,  0.4, 0.2, 2000},
+                                     {20, 40, 0.5, 0.3, 20000},
                              });
     map<string, unsigned int> optimal = readOptimalFile();
     vector<string> instances;
@@ -218,6 +212,35 @@ void run(int which = -1) {
     }
 }
 
+void runItNi(int which = -1) {
+    vector<string> instancesNames(
+            {"ch150", "kroA150", "kroB150", "pr152", "u159", "rat195", "d198", "kroA200", "kroB200", "ts225", "tsp225",
+             "pr226", "gil262", "pr264", "a280", "pr299"});
+    vector<string> betas = {"0.5", "1", "1.5", "2", "2.5", "3"};
+    if (which == 1) {
+        betas = {"0.5", "1"};
+    } else if (which == 2) {
+        betas = {"1.5", "2"};
+    } else if (which == 3) {
+        betas = {"2.5", "3"};
+    } else if (which < 0) {
+        which = 0;
+    }
+
+    Params params = {20, 40, 0.5, 0.4, 20000};
+
+    vector<string> instances;
+    for (const auto &a: instancesNames) {
+        for (const auto &b: betas) {
+            instances.push_back(a + "_" + b); // NOLINT(performance-inefficient-string-concatenation)
+        }
+    }
+
+    map<string, unsigned int> optimals = readOptimalFile();
+
+    testParams(params, instances, optimals);
+}
+
 int main(int argc, char **argv) {
     cout << fixed;
     cout.precision(2);
@@ -230,8 +253,8 @@ int main(int argc, char **argv) {
         cout << "Runing all params" << endl;
     }
 
-    saveOptionalValues(which);
-//    run(which);
+//    saveOptionalValues(which);
+    runItNi(which);
     return 0;
 }
 

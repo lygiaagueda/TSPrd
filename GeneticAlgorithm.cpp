@@ -68,6 +68,13 @@ GeneticAlgorithm::GeneticAlgorithm(
                 iterations_not_improved = 0;
             } else {
                 iterations_not_improved++;
+                if (//(iterations_not_improved % 100) == 0 &&
+                        (xItNi.empty() || iterations_not_improved > xItNi.back().first)) {
+                    xItNi.emplace_back(iterations_not_improved,
+                                       pair<unsigned int, unsigned int>(timer.elapsedTime().count(),
+                                                                        bestSolution->time));
+                }
+
                 if (iterations_not_improved % this->itDiv == 0) {
                     diversify(solutions);
                 } else if (iterations_not_improved == this->itNi) {
