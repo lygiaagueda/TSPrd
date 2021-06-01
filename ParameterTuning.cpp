@@ -84,7 +84,8 @@ static void selectInstances() {
 
 GeneticAlgorithm runWith(const Instance &instance, const Params &params) {
     return GeneticAlgorithm(instance, params.mi, params.lambda, params.nClose(),
-                            params.nbElit(), params.itNi, params.itDiv(), 60 * 60);
+                            params.nbElit(), params.itNi, params.itDiv(),
+                            60 * 60); //(unsigned int) (10 * 60 * (1976.0 / 1201.0))
 }
 
 void saveOptionalValues(int which = 0) {
@@ -105,15 +106,24 @@ void saveOptionalValues(int which = 0) {
             {"ch150", "kroA150", "kroB150", "pr152", "u159", "rat195", "d198", "kroA200", "kroB200", "ts225", "tsp225",
              "pr226", "gil262", "pr264", "a280", "pr299"});
     vector<string> betas = {"0.5", "1", "1.5", "2", "2.5", "3"};
-    if (which == 1) {
-        betas = {"0.5", "1"};
-    } else if (which == 2) {
-        betas = {"1.5", "2"};
-    } else if (which == 3) {
-        betas = {"2.5", "3"};
-    } else if (which < 0) {
-        which = 0;
-    }
+//    if (which == 1) {
+//        betas = {"0.5", "1"};
+//    } else if (which == 2) {
+//        betas = {"1.5", "2"};
+//    } else if (which == 3) {
+//        betas = {"2.5", "3"};
+//    } else if (which < 0) {
+//        which = 0;
+//    }
+
+
+    if (which == 1) betas = {"0.5"};
+    else if (which == 2) betas = {"1"};
+    else if (which == 3) betas = {"1.5"};
+    else if (which == 4) betas = {"2"};
+    else if (which == 5) betas = {"2.5"};
+    else if (which == 6) betas = {"3"};
+    else if (which < 0) which = 0;
 
     string outfile = "instances/testSet/0ref" + to_string(which) + ".txt";
     ofstream fout(outfile, ios::out);
@@ -217,17 +227,16 @@ void runItNi(int which = -1) {
             {"ch150", "kroA150", "kroB150", "pr152", "u159", "rat195", "d198", "kroA200", "kroB200", "ts225", "tsp225",
              "pr226", "gil262", "pr264", "a280", "pr299"});
     vector<string> betas = {"0.5", "1", "1.5", "2", "2.5", "3"};
-    if (which == 1) {
-        betas = {"0.5", "1"};
-    } else if (which == 2) {
-        betas = {"1.5", "2"};
-    } else if (which == 3) {
-        betas = {"2.5", "3"};
-    } else if (which < 0) {
-        which = 0;
-    }
 
-    Params params = {20, 40, 0.5, 0.4, 20000};
+    if (which == 1) betas = {"0.5"};
+    else if (which == 2) betas = {"1"};
+    else if (which == 3) betas = {"1.5"};
+    else if (which == 4) betas = {"2"};
+    else if (which == 5) betas = {"2.5"};
+    else if (which == 6) betas = {"3"};
+    else if (which < 0) which = 0;
+
+    Params params = {20, 40, 0.5, 0.3, 50000};
 
     vector<string> instances;
     for (const auto &a: instancesNames) {
@@ -241,10 +250,73 @@ void runItNi(int which = -1) {
     testParams(params, instances, optimals);
 }
 
+void meanItNi() {
+    const unsigned int ITS = 50000;
+
+    map<string, unsigned int> optimals = readOptimalFile();
+    vector<double> sumGaps(ITS + 1, 0.0);
+    vector<unsigned int> sumTimes(ITS + 1, 0);
+
+    unsigned int executionsCount = 0;
+
+    for (const auto &entry : filesystem::directory_iterator("instances/testSet/itni")) {
+        executionsCount++;
+        string filename = entry.path().filename().string();
+        string instance = filename.substr(0, filename.find_last_of('_'));
+
+        unsigned int n = 0, te, obj, lastN = 0;
+        double gap;
+        ifstream fin(entry.path(), ios::in);
+        while (fin.good() || n == ITS) {
+            fin >> n >> te >> obj;
+            if (n == lastN) break; else lastN = n;
+            gap = (((double) obj / optimals.at(instance)) - 1) * 100;
+            sumGaps[n] += gap;
+            sumTimes[n] += te;
+        }
+
+        te = max(te, (unsigned int) (10 * 60 * (1976.0 / 1201.0)));
+        for (n = n + 1; n <= ITS; n++) {
+            sumGaps[n] += gap;
+            sumTimes[n] += te;
+        }
+
+        fin.close();
+
+    }
+
+
+    char buffer[512];
+    vector<string> gaps(ITS + 1);
+    vector<unsigned int> tes(ITS + 1);
+    for (unsigned int i = 1; i < sumGaps.size(); i++) {
+        double meanGap = sumGaps[i] / executionsCount;
+        sprintf(buffer, "%.2f", meanGap);
+        gaps[i] = string(buffer);
+        replace(gaps[i].begin(), gaps[i].end(), '.', ',');
+
+        tes[i] = sumTimes[i] / executionsCount;
+    }
+
+    ofstream fout("instances/testSet/0itni.csv", ios::out);
+    ofstream fout2("instances/testSet/0itni2.csv", ios::out);
+    for (unsigned int i = 1; i < gaps.size(); i++) {
+        sprintf(buffer, "%d;%s;%d", i, gaps[i].c_str(), tes[i]);
+        string outs(buffer);
+        fout2 << outs << endl;
+        if (i == 0 || i == ITS || gaps[i] != gaps[i + 1]) {
+            fout << outs << endl;
+        }
+    }
+    fout2.close();
+    fout.close();
+}
+
 int main(int argc, char **argv) {
     cout << fixed;
     cout.precision(2);
 //    copyInstances();
+//    meanItNi();
 
     int which = -1;
     if (argc > 1) {
