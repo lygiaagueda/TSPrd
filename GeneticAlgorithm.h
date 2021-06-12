@@ -22,6 +22,8 @@ private:
     const unsigned int itDiv; // max number of iterations without improvement to diversify the current population
     const unsigned int timeLimit; // time limit of the execution of the algorithm in seconds
 
+    bool useDiv;
+
     NeighborSearch ns;
     Solution *bestSolution;
 
@@ -31,26 +33,24 @@ private:
 
     vector<pair<unsigned int, unsigned int> > searchProgress; // stores (time, value) of each best solution found
 
-    RoutePool &routePool;
-
     // random number generator
     mt19937 generator;
     uniform_int_distribution<int> distPopulation; // distribution for the population [0, mi)
 
     vector<Sequence *> *initializePopulation();
 
-    vector<double> getBiasedFitness(vector<Solution *> *solutions) const;
+    vector<double> getBiasedFitness(vector<Solution *> *solutions, bool useDiv) const;
 
-    vector<unsigned int> selectParents(vector<double> &biasedFitness);
+    vector<unsigned int> selectParents(vector<double> &biasedFitness, bool noPop);
 
     static double solutionsDistances(Solution *s1, Solution *s2, bool symmetric);
 
     static Sequence *orderCrossover(const Sequence &parent1, const Sequence &parent2);
 
-    void survivalSelection(vector<Solution *> *solutions, unsigned int Mi);
+    void survivalSelection(vector<Solution *> *solutions, unsigned int Mi, bool useDiv);
 
     void survivalSelection(vector<Solution *> *solutions) { // default mi
-        return survivalSelection(solutions, this->mi);
+        return survivalSelection(solutions, this->mi, this->useDiv);
     }
 
     void diversify(vector<Solution *> *solutions);
@@ -58,7 +58,7 @@ private:
 public:
     GeneticAlgorithm(const Instance &instance, unsigned int mi, unsigned int lambda, unsigned int nClose,
                      unsigned int nbElite, unsigned int itNi, unsigned int itDiv, unsigned int timeLimit,
-                     RoutePool &routePool);
+                     bool educate, bool useDiv);
 
     const Solution &getSolution() {
         return *bestSolution;

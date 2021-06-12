@@ -13,10 +13,12 @@ void freePopulation(vector<Sequence *> *population) {
 
 GeneticAlgorithm::GeneticAlgorithm(
         const Instance &instance, unsigned int mi, unsigned int lambda, unsigned int nClose, unsigned int nbElite,
-        unsigned int itNi, unsigned int itDiv, unsigned int timeLimit, RoutePool &routePool
+        unsigned int itNi, unsigned int itDiv, unsigned int timeLimit,
+        bool educate = true, bool useDiv = true
 ) : instance(instance), mi(mi), lambda(lambda), nbElite(nbElite), nClose(nClose), itNi(itNi), itDiv(itDiv),
-    timeLimit(timeLimit), ns(instance), endTime(0), bestSolutionFoundTime(0), generator((random_device()) ()),
-    distPopulation(0, (int) mi - 1), routePool(routePool) {
+    timeLimit(timeLimit), ns(instance), endTime(0), bestSolutionFoundTime(0),
+    useDiv(useDiv),
+    generator((random_device()) ()), distPopulation(0, (int) mi - 1) {
 
     milliseconds maxTime(this->timeLimit * 1000);
     timer.start();
@@ -44,21 +46,18 @@ GeneticAlgorithm::GeneticAlgorithm(
     unsigned int iterations_not_improved = 0;
 
     while (iterations_not_improved < this->itNi && timer.elapsedTime() < maxTime) {
-        vector<double> biasedFitness = getBiasedFitness(solutions);
+        vector<double> biasedFitness = getBiasedFitness(solutions, useDiv);
 
         while (solutions->size() < mi + lambda) {
             // SELECAO DOS PARENTES PARA CROSSOVER
-            vector<unsigned int> p = selectParents(biasedFitness);
-
+            vector<unsigned int> p = selectParents(biasedFitness, mi+lambda == 1);
             Sequence *child = GeneticAlgorithm::orderCrossover(*population->at(p[0]), *population->at(p[1]));
             auto *sol = new Solution(instance, *child);
             delete child;
 
             // EDUCACAO
-            ns.educate(sol);
+            if (educate) ns.educate(sol);
             solutions->push_back(sol);
-
-            routePool.addRoutesFrom(*sol);
 
             if (sol->time < bestSolution->time) {
                 bestSolutionFoundTime = timer.elapsedTime();
@@ -70,7 +69,7 @@ GeneticAlgorithm::GeneticAlgorithm(
                 iterations_not_improved = 0;
             } else {
                 iterations_not_improved++;
-                if (iterations_not_improved % this->itDiv == 0) {
+                if (useDiv &&iterations_not_improved % this->itDiv == 0) {
                     diversify(solutions);
                 } else if (iterations_not_improved == this->itNi) {
                     break;
@@ -190,34 +189,11 @@ double nCloseMean(const vector<vector<double> > &d, unsigned int n_close, unsign
     return sum / n_close;
 }
 
-vector<double> GeneticAlgorithm::getBiasedFitness(vector<Solution *> *solutions) const {
+vector<double> GeneticAlgorithm::getBiasedFitness(vector<Solution *> *solutions, bool useDiv) const {
     unsigned int N = solutions->size(); // nbIndiv
     vector<double> biasedFitness(N);
 
-    vector<vector<double> > d(N, vector<double>(N)); // guarda a distancia entre cada par de cromossomo
-    for (unsigned int i = 0; i < N; i++) {
-        for (unsigned int j = i + 1; j < N; j++) {
-            d[i][j] = solutionsDistances(solutions->at(i), solutions->at(j), instance.isSymmetric());
-            d[j][i] = d[i][j];
-        }
-    }
-
-    vector<double> nMean(N);
-    for (unsigned int i = 0; i < N; i++) {
-        nMean[i] = nCloseMean(d, nClose, i);
-    }
-
     vector<unsigned int> sortedIndex(N);
-    iota(sortedIndex.begin(), sortedIndex.end(), 0);
-    sort(sortedIndex.begin(), sortedIndex.end(), [&nMean](int i, int j) {
-        return nMean[i] > nMean[j];
-    });
-
-    vector<unsigned int> rankDiversity(N); // rank of the solution with respect to the diversity contribution
-    // best solutions (higher nMean distance) have the smaller ranks
-    for (unsigned int i = 0; i < rankDiversity.size(); i++) {
-        rankDiversity[sortedIndex[i]] = i + 1;
-    }
 
     // rank with respect to the time of the solution
     // best solutions (smaller times) have the smaller ranks
@@ -233,13 +209,45 @@ vector<double> GeneticAlgorithm::getBiasedFitness(vector<Solution *> *solutions)
     // best solutions have smaller biased fitness
     biasedFitness.resize(solutions->size());
     for (unsigned int i = 0; i < biasedFitness.size(); i++) {
-        biasedFitness[i] = rankFitness[i] + (1 - ((double) nbElite / N)) * rankDiversity[i];
+        biasedFitness[i] = rankFitness[i];
+    }
+
+    if (useDiv) {
+        vector<vector<double> > d(N, vector<double>(N)); // guarda a distancia entre cada par de cromossomo
+        for (unsigned int i = 0; i < N; i++) {
+            for (unsigned int j = i + 1; j < N; j++) {
+                d[i][j] = solutionsDistances(solutions->at(i), solutions->at(j), instance.isSymmetric());
+                d[j][i] = d[i][j];
+            }
+        }
+
+        vector<double> nMean(N);
+        for (unsigned int i = 0; i < N; i++) {
+            nMean[i] = nCloseMean(d, nClose, i);
+        }
+        iota(sortedIndex.begin(), sortedIndex.end(), 0);
+        sort(sortedIndex.begin(), sortedIndex.end(), [&nMean](int i, int j) {
+            return nMean[i] > nMean[j];
+        });
+        vector<unsigned int> rankDiversity(N); // rank of the solution with respect to the diversity contribution
+        // best solutions (higher nMean distance) have the smaller ranks
+        for (unsigned int i = 0; i < rankDiversity.size(); i++) {
+            rankDiversity[sortedIndex[i]] = i + 1;
+        }
+
+        for (unsigned int i = 0; i < biasedFitness.size(); i++) {
+            biasedFitness[i] += (1 - ((double) nbElite / N)) * rankDiversity[i];
+        }
     }
 
     return biasedFitness;
 }
 
-vector<unsigned int> GeneticAlgorithm::selectParents(vector<double> &biasedFitness) {
+vector<unsigned int> GeneticAlgorithm::selectParents(vector<double> &biasedFitness, bool noPop) {
+    if(noPop) {
+        return vector<unsigned int>(0, 0);
+    }
+
     // select first parent
     vector<unsigned int> p(2);
     int p1a = distPopulation(generator), p1b = distPopulation(generator);
@@ -305,8 +313,8 @@ Sequence *GeneticAlgorithm::orderCrossover(const Sequence &parent1, const Sequen
     return offspring;
 }
 
-void GeneticAlgorithm::survivalSelection(vector<Solution *> *solutions, unsigned int Mi) {
-    vector<double> biasedFitness = getBiasedFitness(solutions);
+void GeneticAlgorithm::survivalSelection(vector<Solution *> *solutions, unsigned int Mi, bool useDiv) {
+    vector<double> biasedFitness = getBiasedFitness(solutions, useDiv);
     for (unsigned int i = 0; i < solutions->size(); i++) {
         solutions->at(i)->id = i;
     }
@@ -336,7 +344,7 @@ void GeneticAlgorithm::survivalSelection(vector<Solution *> *solutions, unsigned
 }
 
 void GeneticAlgorithm::diversify(vector<Solution *> *solutions) {
-    survivalSelection(solutions, mi / 3); // keeps the mi/3 best solutions we have so far
+    survivalSelection(solutions, mi / 3, useDiv); // keeps the mi/3 best solutions we have so far
 
     // generate more solutions with the same procedure that generated the initial population
     // and appends to the current solutions

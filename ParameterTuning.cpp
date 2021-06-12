@@ -23,6 +23,9 @@ struct Params {
     double nc;
     unsigned int itNi;
 
+    bool educate;
+    bool useDiv;
+
     unsigned int nClose() const {
         return (unsigned int) (nc * mi);
     }
@@ -90,7 +93,8 @@ static void selectInstances() {
 
 Result runWith(const Instance &instance, const Params &params) {
     auto ga = GeneticAlgorithm(instance, params.mi, params.lambda, params.nClose(),
-                               params.nbElit(), params.itNi, params.itDiv(), 60 * 60);
+                               params.nbElit(), params.itNi, params.itDiv(), 60 * 60,
+                               params.educate, params.useDiv);
 
     return {ga.getSolution().time, ga.getBestSolutionTime(), ga.getExecutionTime()};
 }
@@ -158,8 +162,8 @@ map<string, unsigned int> readOptimalFile() {
     return optimal;
 }
 
-void testParams(const Params &params, const vector<string> &instances, const map<string, unsigned int> &optimals) {
-    params.print();
+void testParams(const string &name, const Params &params, const vector<string> &instances, const map<string, unsigned int> &optimals) {
+    cout << "Running " << name << endl;
     const unsigned int NUMBER_EXECUTIONS = 10;
     const unsigned int TOTAL_EXECUTIONS = NUMBER_EXECUTIONS * instances.size();
 
@@ -188,33 +192,37 @@ void testParams(const Params &params, const vector<string> &instances, const map
     unsigned int meanTimeBest = totalTimeBest / TOTAL_EXECUTIONS;
 
     char buffer[200];
-    sprintf(buffer, "(%2d %3d %.2f %.2f) -> %8d %8d % 7.2f%%", params.mi, params.lambda, params.el, params.nc,
-            meanTimeExec, meanTimeBest, meanGap);
+    sprintf(buffer, "%s -> %8d %8d % 7.2f%%", name.c_str(), meanTimeExec, meanTimeBest, meanGap);
     cout << buffer << endl;
 
-    ofstream fout("instances/testSet/0results.txt", ios::app);
+    ofstream fout("instances/testSet/0results_sens_analisys.txt", ios::app);
     fout << buffer << endl;
     fout.close();
 }
 
 void run(int which = -1) {
-    vector<Params> paramsSet({
-                                     {25, 100, 0.4, 0.2, 2000},
-                                     {13, 50,  0.4, 0.2, 2000},
-                                     {50, 200, 0.4, 0.2, 2000},
-                                     {25, 50,  0.4, 0.2, 2000},
-                             });
+    map<string, Params> xparams;
+    xparams["standard"] = {20, 40, 0.5, 0.3, 10000, true, true};
+    xparams["no-edu"] = {20, 40, 0.5, 0.3, 10000, false, true};
+    xparams["no-div"] = {20, 40, 0.5, 0.3, 10000, true, false};
+    xparams["pop-up"] = {40, 80, 0.5, 0.3, 10000, true, true};
+    xparams["pop-down"] = {10, 20, 0.5, 0.3, 10000, true, true};
+    xparams["no-pop"] = {1, 0, 1, 0.3, 10000, true, true};
+
+    vector<pair<string, Params> > params;
+    copy(xparams.begin(), xparams.end(), back_inserter(params));
+
     map<string, unsigned int> optimal = readOptimalFile();
     vector<string> instances;
     instances.reserve(optimal.size());
     for (auto const &x : optimal) instances.push_back(x.first);
 
     if (which == -1) {
-        for (const auto &params: paramsSet) {
-            testParams(params, instances, optimal);
+        for (const auto &p: params) {
+            testParams(p.first, p.second, instances, optimal);
         }
     } else {
-        testParams(paramsSet[which], instances, optimal);
+        testParams(params[which].first, params[which].second, instances, optimal);
     }
 }
 
@@ -230,8 +238,8 @@ int main(int argc, char **argv) {
         cout << "Runing all params" << endl;
     }
 
-    saveOptionalValues(which);
-//    run(which);
+//    saveOptionalValues(which);
+    run(which);
     return 0;
 }
 
